@@ -1,7 +1,10 @@
 import html
+import os
 import secrets
 import sqlite3
 import string
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from dateutil.relativedelta import relativedelta
@@ -33,7 +36,34 @@ ADMIN_USERNAMES = {
 ADMIN_CHAT_ID = None
 
 IST = ZoneInfo("Asia/Kolkata")
-DB_PATH = "codes.db"
+
+# Use a persistent path if available (e.g., if a Render disk is mounted at /data)
+# Otherwise defaults to codes.db locally
+DB_PATH = os.environ.get("RENDER_DISK_PATH", "codes.db")
+
+
+# ============================================================
+# RENDER DUMMY HTTP SERVER (Fixes Port Binding Error)
+# ============================================================
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot is active and running!")
+
+    def log_message(self, format, *args):
+        # Suppress routine request logs to keep console clean
+        return
+
+def run_http_server():
+    port = int(os.environ.get("PORT", 10000))
+    server_address = ("0.0.0.0", port)
+    httpd = HTTPServer(server_address, HealthCheckHandler)
+    print(f"ðŸŒ HTTP health-check server listening on port {port}")
+    httpd.serve_forever()
+
 
 # ============================================================
 # DATABASE UTILITIES
@@ -127,21 +157,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             available_codes = total_codes - activated_codes
 
             await update.message.reply_text(
-                "👋 <b>Admin Dashboard</b>\n\n"
-                "📊 <b>Link Report:</b>\n"
-                f"• Total Links: {total_codes}\n"
-                f"• Activated: {activated_codes}\n"
-                f"• Available: {available_codes}\n\n"
+                "ðŸ‘‹ <b>Admin Dashboard</b>\n\n"
+                "ðŸ“Š <b>Link Report:</b>\n"
+                f"â€¢ Total Links: {total_codes}\n"
+                f"â€¢ Activated: {activated_codes}\n"
+                f"â€¢ Available: {available_codes}\n\n"
                 "<b>Commands:</b>\n"
-                "• /generate - Generate links with quantity\n"
-                "• /codes - View all generated codes",
+                "â€¢ /generate - Generate links with quantity\n"
+                "â€¢ /codes - View all generated codes",
                 parse_mode="HTML"
             )
             return
 
         # Regular user landing page
         await update.message.reply_text(
-            "👋 Welcome!\n\n"
+            "ðŸ‘‹ Welcome!\n\n"
             "This bot activates your Telegram Premium gifts purchased from Kinguin.\n"
             "Please click the activation link you received after purchase.\n\n"
             f"If you have any issues, contact {SUPPORT_USERNAME}"
@@ -158,7 +188,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not row:
         await update.message.reply_text(
-            "❌ Invalid or expired code.\n\n"
+            "âŒ Invalid or expired code.\n\n"
             f"If you believe this is an error, please contact support: {SUPPORT_USERNAME}"
         )
         return
@@ -167,11 +197,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         safe_order = html.escape(str(row['order_name']))
         safe_activated_by = html.escape(str(row['activated_by']))
         await update.message.reply_text(
-            "⚠️ <b>This code has already been activated.</b>\n"
-            f"📦 Order: {safe_order}\n"
-            f"👤 Activated by: {safe_activated_by}\n"
-            f"🕒 Activated at: {row['activated_at']}\n"
-            f"📅 Expire at: {row['expires_at']}\n\n"
+            "âš ï¸ <b>This code has already been activated.</b>\n"
+            f"ðŸ“¦ Order: {safe_order}\n"
+            f"ðŸ‘¤ Activated by: {safe_activated_by}\n"
+            f"ðŸ•’ Activated at: {row['activated_at']}\n"
+            f"ðŸ“… Expire at: {row['expires_at']}\n\n"
             f"If you believe this is an error, please contact support: {SUPPORT_USERNAME}",
             parse_mode="HTML"
         )
@@ -179,18 +209,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # User confirmation screen (prevents accidental consumption)
     keyboard = [
-        [InlineKeyboardButton("✅ Confirm & Activate Now", callback_data=f"confirm_claim:{code}")],
-        [InlineKeyboardButton("❌ Cancel", callback_data="cancel_claim")]
+        [InlineKeyboardButton("âœ… Confirm & Activate Now", callback_data=f"confirm_claim:{code}")],
+        [InlineKeyboardButton("âŒ Cancel", callback_data="cancel_claim")]
     ]
 
     safe_order_name = html.escape(str(row["order_name"]))
     safe_user_name = html.escape(get_user_display_name(user))
 
     await update.message.reply_text(
-        f"🎁 <b>Telegram Premium Gift Found!</b>\n\n"
-        f"📦 <b>Source:</b> {safe_order_name}\n"
-        f"⏳ <b>Duration:</b> {row['duration_months']} Months\n"
-        f"👤 <b>Target Account:</b> {safe_user_name}\n\n"
+        f"ðŸŽ <b>Telegram Premium Gift Found!</b>\n\n"
+        f"ðŸ“¦ <b>Source:</b> {safe_order_name}\n"
+        f"â³ <b>Duration:</b> {row['duration_months']} Months\n"
+        f"ðŸ‘¤ <b>Target Account:</b> {safe_user_name}\n\n"
         "Click the button below to confirm and activate this gift on your current account:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="HTML"
@@ -212,11 +242,11 @@ async def confirm_claim_callback(update: Update, context: ContextTypes.DEFAULT_T
         row = conn.execute("SELECT * FROM codes WHERE code = ?", (code,)).fetchone()
 
         if not row:
-            await query.edit_message_text("❌ This code does not exist.")
+            await query.edit_message_text("âŒ This code does not exist.")
             return
 
         if row["activated"]:
-            await query.edit_message_text("⚠️ This code has already been claimed.")
+            await query.edit_message_text("âš ï¸ This code has already been claimed.")
             return
 
         username = get_user_display_name(user)
@@ -238,15 +268,15 @@ async def confirm_claim_callback(update: Update, context: ContextTypes.DEFAULT_T
         conn.commit()
 
         if cursor.rowcount == 0:
-            await query.edit_message_text("⚠️ This code was just claimed by another session.")
+            await query.edit_message_text("âš ï¸ This code was just claimed by another session.")
             return
 
     months_label = f"{row['duration_months']} months"
 
     await query.edit_message_text(
-        f"✅ <b>Activation Successful!</b>\n\n"
+        f"âœ… <b>Activation Successful!</b>\n\n"
         f"Your Telegram Premium ({months_label}) request has been received.\n\n"
-        "⏳ It will be processed and activated within a few hours (working in GMT+8 timezone).\n\n"
+        "â³ It will be processed and activated within a few hours (working in GMT+8 timezone).\n\n"
         f"If you have any questions, please contact {SUPPORT_USERNAME}",
         parse_mode="HTML"
     )
@@ -256,12 +286,12 @@ async def confirm_claim_callback(update: Update, context: ContextTypes.DEFAULT_T
         safe_username = html.escape(username)
         safe_order = html.escape(row["order_name"])
         admin_alert = (
-            "🔔 <b>New Link Activated!</b>\n\n"
-            f"🔑 <b>Code:</b> <code>{code}</code>\n"
-            f"📦 <b>Order:</b> {safe_order}\n"
-            f"⏳ <b>Duration:</b> {months_label}\n"
-            f"👤 <b>Activated by:</b> {safe_username} (ID: <code>{user.id}</code>)\n"
-            f"🕒 <b>Date & Time:</b> {activated_time}"
+            "ðŸ”” <b>New Link Activated!</b>\n\n"
+            f"ðŸ”‘ <b>Code:</b> <code>{code}</code>\n"
+            f"ðŸ“¦ <b>Order:</b> {safe_order}\n"
+            f"â³ <b>Duration:</b> {months_label}\n"
+            f"ðŸ‘¤ <b>Activated by:</b> {safe_username} (ID: <code>{user.id}</code>)\n"
+            f"ðŸ•’ <b>Date & Time:</b> {activated_time}"
         )
         try:
             await context.bot.send_message(
@@ -276,7 +306,7 @@ async def confirm_claim_callback(update: Update, context: ContextTypes.DEFAULT_T
 async def cancel_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("❌ Activation cancelled. Your code has not been used.")
+    await query.edit_message_text("âŒ Activation cancelled. Your code has not been used.")
 
 
 # ============================================================
@@ -287,7 +317,7 @@ async def generate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global ADMIN_CHAT_ID
     user = update.effective_user
     if not is_admin(user):
-        await update.message.reply_text("❌ You are not authorized to use this command.")
+        await update.message.reply_text("âŒ You are not authorized to use this command.")
         return
 
     if not ADMIN_CHAT_ID:
@@ -295,14 +325,14 @@ async def generate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [
-            InlineKeyboardButton("📦 Kinguin", callback_data="order:Kinguin"),
-            InlineKeyboardButton("📦 BSV", callback_data="order:BSV"),
-            InlineKeyboardButton("📦 G2A", callback_data="order:G2A"),
+            InlineKeyboardButton("ðŸ“¦ Kinguin", callback_data="order:Kinguin"),
+            InlineKeyboardButton("ðŸ“¦ BSV", callback_data="order:BSV"),
+            InlineKeyboardButton("ðŸ“¦ G2A", callback_data="order:G2A"),
         ]
     ]
 
     await update.message.reply_text(
-        "📦 Select the order source:",
+        "ðŸ“¦ Select the order source:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -312,7 +342,7 @@ async def order_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if not is_admin(query.from_user):
-        await query.edit_message_text("❌ You are not authorized.")
+        await query.edit_message_text("âŒ You are not authorized.")
         return
 
     order_name = query.data.split(":", 1)[1]
@@ -327,7 +357,7 @@ async def order_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await query.edit_message_text(
-        f"📦 Order: {order_name}\n\n⏳ Select duration:",
+        f"ðŸ“¦ Order: {order_name}\n\nâ³ Select duration:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -337,7 +367,7 @@ async def duration_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if not is_admin(query.from_user):
-        await query.edit_message_text("❌ You are not authorized.")
+        await query.edit_message_text("âŒ You are not authorized.")
         return
 
     duration = int(query.data.split(":", 1)[1])
@@ -354,9 +384,9 @@ async def duration_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await query.edit_message_text(
-        f"📦 Order: {order_name}\n"
-        f"⏳ Duration: {duration} Months\n\n"
-        "🔢 Select quantity to generate:",
+        f"ðŸ“¦ Order: {order_name}\n"
+        f"â³ Duration: {duration} Months\n\n"
+        "ðŸ”¢ Select quantity to generate:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -366,7 +396,7 @@ async def quantity_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if not is_admin(query.from_user):
-        await query.edit_message_text("❌ You are not authorized.")
+        await query.edit_message_text("âŒ You are not authorized.")
         return
 
     qty = int(query.data.split(":", 1)[1])
@@ -374,7 +404,7 @@ async def quantity_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     duration = context.user_data.pop("selected_duration", None)
 
     if not order_name or not duration:
-        await query.edit_message_text("❌ Session expired. Please use /generate again.")
+        await query.edit_message_text("âŒ Session expired. Please use /generate again.")
         return
 
     codes_to_insert = []
@@ -384,7 +414,7 @@ async def quantity_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
         code = generate_code()
         codes_to_insert.append((code, order_name, duration))
         link = f"https://t.me/{BOT_USERNAME}?start={code}"
-        generated_links.append(f"• <code>{code}</code>\n<a href=\"{link}\">{link}</a>")
+        generated_links.append(f"â€¢ <code>{code}</code>\n<a href=\"{link}\">{link}</a>")
 
     with get_db_connection() as conn:
         conn.executemany(
@@ -397,14 +427,14 @@ async def quantity_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Chunking generated output if bulk creation is large
     full_text = (
-        f"✅ <b>Generated {qty} link(s)!</b>\n\n"
-        f"📦 <b>Order:</b> {html.escape(order_name)}\n"
-        f"⏳ <b>Duration:</b> {duration} Months\n\n"
+        f"âœ… <b>Generated {qty} link(s)!</b>\n\n"
+        f"ðŸ“¦ <b>Order:</b> {html.escape(order_name)}\n"
+        f"â³ <b>Duration:</b> {duration} Months\n\n"
         f"{links_text}"
     )
 
     if len(full_text) > 4000:
-        await query.edit_message_text(f"✅ Generated {qty} link(s) successfully! Sending details...", parse_mode="HTML")
+        await query.edit_message_text(f"âœ… Generated {qty} link(s) successfully! Sending details...", parse_mode="HTML")
         current_chunk = []
         current_length = 0
         for link_line in generated_links:
@@ -428,7 +458,7 @@ async def quantity_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not is_admin(user):
-        await update.message.reply_text("❌ You are not authorized.")
+        await update.message.reply_text("âŒ You are not authorized.")
         return
 
     with get_db_connection() as conn:
@@ -437,17 +467,17 @@ async def codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ).fetchall()
 
     if not rows:
-        await update.message.reply_text("📋 No codes have been generated yet.")
+        await update.message.reply_text("ðŸ“‹ No codes have been generated yet.")
         return
 
-    lines = ["📋 <b>All Activation Codes:</b>\n"]
+    lines = ["ðŸ“‹ <b>All Activation Codes:</b>\n"]
     for row in rows:
-        status = "⚠️ Activated" if row["activated"] else "🟢 Available"
+        status = "âš ï¸ Activated" if row["activated"] else "ðŸŸ¢ Available"
         safe_order = html.escape(str(row['order_name']))
-        line = f"🔑 <code>{row['code']}</code> | {safe_order} ({row['duration_months']}M) - {status}"
+        line = f"ðŸ”‘ <code>{row['code']}</code> | {safe_order} ({row['duration_months']}M) - {status}"
         if row["activated"]:
             safe_by = html.escape(str(row["activated_by"]))
-            line += f"\n    └ By: {safe_by} on {row['activated_at']}"
+            line += f"\n    â”” By: {safe_by} on {row['activated_at']}"
         lines.append(line)
 
     # Safe pagination/chunking respecting Telegram's 4096 limit
@@ -473,6 +503,10 @@ async def codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     init_db()
 
+    # Start dummy HTTP server in a background thread to satisfy Render port check
+    server_thread = threading.Thread(target=run_http_server, daemon=True)
+    server_thread.start()
+
     application = Application.builder().token(BOT_TOKEN).build()
 
     # Commands
@@ -489,7 +523,7 @@ def main():
     application.add_handler(CallbackQueryHandler(confirm_claim_callback, pattern=r"^confirm_claim:"))
     application.add_handler(CallbackQueryHandler(cancel_claim_callback, pattern=r"^cancel_claim$"))
 
-    print("🤖 Bot is running...")
+    print("ðŸ¤– Bot is running...")
     application.run_polling()
 
 
