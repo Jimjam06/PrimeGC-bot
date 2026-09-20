@@ -1,20 +1,10 @@
 import html
-import os
 import secrets
 import sqlite3
 import string
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from dateutil.relativedelta import relativedelta
-
-# Try importing turso_serverless for cloud SQLite support
-try:
-    import turso_serverless
-    TURSO_AVAILABLE = True
-except ImportError:
-    TURSO_AVAILABLE = False
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -28,56 +18,32 @@ from telegram.ext import (
 # CONFIG
 # ============================================================
 
+# Insert your BotFather token here
 BOT_TOKEN = "8811516722:AAFT9OCvvRpd5TpKMt3fAOGPpCk2vsFV6q0"
 BOT_USERNAME = "PrimeGC_Topup_Bot"
 SUPPORT_USERNAME = "@PrimeGC_6"
 
-ADMIN_USER_IDS = {
-    1123404836,
+# Admin handles without '@'
+ADMIN_USERNAMES = {
+    "primegc_6",
 }
 
+# The bot will auto-detect your chat ID when you run /start from your admin account,
+# or you can hardcode your numeric Telegram ID here (e.g., 123456789)
 ADMIN_CHAT_ID = None
 
 IST = ZoneInfo("Asia/Kolkata")
-
-TURSO_URL = os.environ.get("TURSO_DATABASE_URL", "")
-TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
 DB_PATH = "codes.db"
 
-
 # ============================================================
-# RENDER DUMMY HTTP SERVER (Fixes Port Binding Error)
-# ============================================================
-
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain")
-        self.end_headers()
-        self.wfile.write(b"Bot is active and running!")
-
-    def log_message(self, format, *args):
-        return
-
-def run_http_server():
-    port = int(os.environ.get("PORT", 10000))
-    server_address = ("0.0.0.0", port)
-    httpd = HTTPServer(server_address, HealthCheckHandler)
-    print(f"🌐 HTTP health-check server listening on port {port}")
-    httpd.serve_forever()
-
-
-# ============================================================
-# DATABASE UTILITIES (Cloud & Local Support)
+# DATABASE UTILITIES
 # ============================================================
 
 def get_db_connection():
-    if TURSO_AVAILABLE and TURSO_URL:
-        return turso_serverless.connect(TURSO_URL, auth_token=TURSO_TOKEN)
-    else:
-        conn = sqlite3.connect(DB_PATH, timeout=10.0, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        return conn
+    """Create a thread-safe connection per operation."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 def init_db():
@@ -102,11 +68,15 @@ def init_db():
 # ============================================================
 
 def is_admin(user) -> bool:
+    """Check if user has an admin username or matching admin chat ID."""
     if not user:
         return False
     if ADMIN_CHAT_ID and user.id == ADMIN_CHAT_ID:
         return True
-    return user.id in ADMIN_USER_IDS
+    if not user.username:
+        return False
+    clean_username = user.username.lstrip("@").lower()
+    return clean_username in {u.lstrip("@").lower() for u in ADMIN_USERNAMES}
 
 
 def get_user_display_name(user) -> str:
@@ -141,9 +111,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not user:
         return
 
+    # Auto-save admin's chat ID when admin runs /start
     if is_admin(user) and not ADMIN_CHAT_ID:
         ADMIN_CHAT_ID = update.effective_chat.id
 
+    # Case 1: Plain /start without parameters
     if not context.args:
         if is_admin(user):
             with get_db_connection() as conn:
@@ -167,6 +139,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        # Regular user landing page
         await update.message.reply_text(
             "👋 Welcome!\n\n"
             "This bot activates your Telegram Premium gifts purchased from Kinguin.\n"
@@ -175,6 +148,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # Case 2: Link opened with code parameter (/start <CODE>)
     code = context.args[0].strip().upper()
 
     with get_db_connection() as conn:
@@ -203,6 +177,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # User confirmation screen (prevents accidental consumption)
     keyboard = [
         [InlineKeyboardButton("✅ Confirm & Activate Now", callback_data=f"confirm_claim:{code}")],
         [InlineKeyboardButton("❌ Cancel", callback_data="cancel_claim")]
@@ -276,6 +251,7 @@ async def confirm_claim_callback(update: Update, context: ContextTypes.DEFAULT_T
         parse_mode="HTML"
     )
 
+    # Admin Alert
     if ADMIN_CHAT_ID:
         safe_username = html.escape(username)
         safe_order = html.escape(row["order_name"])
@@ -419,29 +395,14 @@ async def quantity_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     links_text = "\n\n".join(generated_links)
 
-    full_text = (
+    await query.edit_message_text(
         f"✅ <b>Generated {qty} link(s)!</b>\n\n"
         f"📦 <b>Order:</b> {html.escape(order_name)}\n"
         f"⏳ <b>Duration:</b> {duration} Months\n\n"
-        f"{links_text}"
+        f"{links_text}",
+        parse_mode="HTML",
+        disable_web_page_preview=True
     )
-
-    if len(full_text) > 4000:
-        await query.edit_message_text(f"✅ Generated {qty} link(s) successfully! Sending details...", parse_mode="HTML")
-        current_chunk = []
-        current_length = 0
-        for link_line in generated_links:
-            if current_length + len(link_line) + 2 > 4000:
-                await query.message.reply_text("\n\n".join(current_chunk), parse_mode="HTML", disable_web_page_preview=True)
-                current_chunk = [link_line]
-                current_length = len(link_line)
-            else:
-                current_chunk.append(link_line)
-                current_length += len(link_line) + 2
-        if current_chunk:
-            await query.message.reply_text("\n\n".join(current_chunk), parse_mode="HTML", disable_web_page_preview=True)
-    else:
-        await query.edit_message_text(full_text, parse_mode="HTML", disable_web_page_preview=True)
 
 
 # ============================================================
@@ -467,12 +428,14 @@ async def codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for row in rows:
         status = "⚠️ Activated" if row["activated"] else "🟢 Available"
         safe_order = html.escape(str(row['order_name']))
-        line = f"🔑 <code>{row['code']}</code> | {safe_order} ({row['duration_months']}M) - {status}"
+        lines.append(
+            f"🔑 <code>{row['code']}</code> | {safe_order} ({row['duration_months']}M) - {status}"
+        )
         if row["activated"]:
             safe_by = html.escape(str(row["activated_by"]))
-            line += f"\n    └ By: {safe_by} on {row['activated_at']}"
-        lines.append(line)
+            lines.append(f"    └ By: {safe_by} on {row['activated_at']}")
 
+    # Handle Telegram's 4096 character limit by chunking messages if necessary
     current_chunk = []
     current_length = 0
     for line in lines:
@@ -495,19 +458,19 @@ async def codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     init_db()
 
-    server_thread = threading.Thread(target=run_http_server, daemon=True)
-    server_thread.start()
-
     application = Application.builder().token(BOT_TOKEN).build()
 
+    # Commands
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("generate", generate))
     application.add_handler(CommandHandler("codes", codes))
 
+    # Stepped Generation Callbacks
     application.add_handler(CallbackQueryHandler(order_selected, pattern=r"^order:"))
     application.add_handler(CallbackQueryHandler(duration_selected, pattern=r"^duration:"))
     application.add_handler(CallbackQueryHandler(quantity_selected, pattern=r"^qty:"))
 
+    # Stepped Activation Callbacks
     application.add_handler(CallbackQueryHandler(confirm_claim_callback, pattern=r"^confirm_claim:"))
     application.add_handler(CallbackQueryHandler(cancel_claim_callback, pattern=r"^cancel_claim$"))
 
