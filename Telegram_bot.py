@@ -28,23 +28,18 @@ from telegram.ext import (
 # CONFIG
 # ============================================================
 
-# Insert your BotFather token here
 BOT_TOKEN = "8811516722:AAFT9OCvvRpd5TpKMt3fAOGPpCk2vsFV6q0"
 BOT_USERNAME = "PrimeGC_Topup_Bot"
 SUPPORT_USERNAME = "@PrimeGC_6"
 
-# Admin handles without '@'
 ADMIN_USERNAMES = {
     "primegc_6",
 }
 
-# The bot will auto-detect your chat ID when you run /start from your admin account,
-# or you can hardcode your numeric Telegram ID here (e.g., 123456789)
 ADMIN_CHAT_ID = None
 
 IST = ZoneInfo("Asia/Kolkata")
 
-# Cloud or Local Database settings
 TURSO_URL = os.environ.get("TURSO_DATABASE_URL", "")
 TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
 DB_PATH = "codes.db"
@@ -62,7 +57,6 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"Bot is active and running!")
 
     def log_message(self, format, *args):
-        # Suppress routine request logs to keep console clean
         return
 
 def run_http_server():
@@ -78,7 +72,6 @@ def run_http_server():
 # ============================================================
 
 def get_db_connection():
-    """Connects to Turso cloud database if configured, else falls back to local sqlite3."""
     if LIBSQL_AVAILABLE and TURSO_URL.startswith(("libsql://", "https://")):
         return libsql.connect(database=TURSO_URL, auth_token=TURSO_TOKEN)
     else:
@@ -109,7 +102,6 @@ def init_db():
 # ============================================================
 
 def is_admin(user) -> bool:
-    """Check if user has an admin username or matching admin chat ID."""
     if not user:
         return False
     if ADMIN_CHAT_ID and user.id == ADMIN_CHAT_ID:
@@ -152,11 +144,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not user:
         return
 
-    # Auto-save admin's chat ID when admin runs /start
     if is_admin(user) and not ADMIN_CHAT_ID:
         ADMIN_CHAT_ID = update.effective_chat.id
 
-    # Case 1: Plain /start without parameters
     if not context.args:
         if is_admin(user):
             with get_db_connection() as conn:
@@ -180,7 +170,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Regular user landing page
         await update.message.reply_text(
             "👋 Welcome!\n\n"
             "This bot activates your Telegram Premium gifts purchased from Kinguin.\n"
@@ -189,7 +178,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Case 2: Link opened with code parameter (/start <CODE>)
     code = context.args[0].strip().upper()
 
     with get_db_connection() as conn:
@@ -218,7 +206,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # User confirmation screen (prevents accidental consumption)
     keyboard = [
         [InlineKeyboardButton("✅ Confirm & Activate Now", callback_data=f"confirm_claim:{code}")],
         [InlineKeyboardButton("❌ Cancel", callback_data="cancel_claim")]
@@ -292,7 +279,6 @@ async def confirm_claim_callback(update: Update, context: ContextTypes.DEFAULT_T
         parse_mode="HTML"
     )
 
-    # Admin Alert
     if ADMIN_CHAT_ID:
         safe_username = html.escape(username)
         safe_order = html.escape(row["order_name"])
@@ -436,7 +422,6 @@ async def quantity_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     links_text = "\n\n".join(generated_links)
 
-    # Chunking generated output if bulk creation is large
     full_text = (
         f"✅ <b>Generated {qty} link(s)!</b>\n\n"
         f"📦 <b>Order:</b> {html.escape(order_name)}\n"
@@ -491,7 +476,6 @@ async def codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             line += f"\n    └ By: {safe_by} on {row['activated_at']}"
         lines.append(line)
 
-    # Safe pagination/chunking respecting Telegram's 4096 limit
     current_chunk = []
     current_length = 0
     for line in lines:
@@ -514,28 +498,24 @@ async def codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     init_db()
 
-    # Start dummy HTTP server in a background thread to satisfy Render port check
     server_thread = threading.Thread(target=run_http_server, daemon=True)
     server_thread.start()
 
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Commands
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("generate", generate))
     application.add_handler(CommandHandler("codes", codes))
 
-    # Stepped Generation Callbacks
     application.add_handler(CallbackQueryHandler(order_selected, pattern=r"^order:"))
     application.add_handler(CallbackQueryHandler(duration_selected, pattern=r"^duration:"))
-    application.add_handler(CallbackQueryHandler, quantity_selected, pattern=r"^qty:"))
+    application.add_handler(CallbackQueryHandler(quantity_selected, pattern=r"^qty:"))
 
-    # Stepped Activation Callbacks
     application.add_handler(CallbackQueryHandler(confirm_claim_callback, pattern=r"^confirm_claim:"))
     application.add_handler(CallbackQueryHandler(cancel_claim_callback, pattern=r"^cancel_claim$"))
 
     print("🤖 Bot is running...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling()
 
 
 if __name__ == "__main__":
