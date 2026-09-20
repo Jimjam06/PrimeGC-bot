@@ -9,6 +9,13 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from dateutil.relativedelta import relativedelta
 
+# Try importing libsql for cloud SQLite support (Turso)
+try:
+    import libsql
+    LIBSQL_AVAILABLE = True
+except ImportError:
+    LIBSQL_AVAILABLE = False
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -37,7 +44,9 @@ ADMIN_CHAT_ID = None
 
 IST = ZoneInfo("Asia/Kolkata")
 
-# Database path set to local file to prevent Render disk permission errors
+# Cloud or Local Database settings
+TURSO_URL = os.environ.get("TURSO_DATABASE_URL", "")
+TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
 DB_PATH = "codes.db"
 
 
@@ -65,14 +74,17 @@ def run_http_server():
 
 
 # ============================================================
-# DATABASE UTILITIES
+# DATABASE UTILITIES (Cloud & Local Support)
 # ============================================================
 
 def get_db_connection():
-    """Create a thread-safe connection per operation."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """Connects to Turso cloud database if configured, else falls back to local sqlite3."""
+    if LIBSQL_AVAILABLE and TURSO_URL.startswith(("libsql://", "https://")):
+        return libsql.connect(database=TURSO_URL, auth_token=TURSO_TOKEN)
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
 
 
 def init_db():
@@ -516,7 +528,7 @@ def main():
     # Stepped Generation Callbacks
     application.add_handler(CallbackQueryHandler(order_selected, pattern=r"^order:"))
     application.add_handler(CallbackQueryHandler(duration_selected, pattern=r"^duration:"))
-    application.add_handler(CallbackQueryHandler(quantity_selected, pattern=r"^qty:"))
+    application.add_handler(CallbackQueryHandler, quantity_selected, pattern=r"^qty:"))
 
     # Stepped Activation Callbacks
     application.add_handler(CallbackQueryHandler(confirm_claim_callback, pattern=r"^confirm_claim:"))
