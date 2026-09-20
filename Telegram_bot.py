@@ -37,9 +37,8 @@ ADMIN_CHAT_ID = None
 
 IST = ZoneInfo("Asia/Kolkata")
 
-# Use a persistent path if available (e.g., if a Render disk is mounted at /data)
-# Otherwise defaults to codes.db locally
-DB_PATH = os.environ.get("RENDER_DISK_PATH", "codes.db")
+# Database path set to local file to prevent Render disk permission errors
+DB_PATH = "codes.db"
 
 
 # ============================================================
@@ -527,6 +526,5 @@ def main():
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
-# --- CRITICAL FIX FOR PYTHON THREAD EVENT LOOP CRASHES ---
 if __name__ == "__main__":
     main()
