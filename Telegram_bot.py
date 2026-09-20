@@ -9,12 +9,12 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from dateutil.relativedelta import relativedelta
 
-# Try importing libsql for cloud SQLite support (Turso)
+# Try importing turso_serverless for cloud SQLite support
 try:
-    import libsql
-    LIBSQL_AVAILABLE = True
+    import turso_serverless
+    TURSO_AVAILABLE = True
 except ImportError:
-    LIBSQL_AVAILABLE = False
+    TURSO_AVAILABLE = False
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -72,8 +72,8 @@ def run_http_server():
 # ============================================================
 
 def get_db_connection():
-    if LIBSQL_AVAILABLE and TURSO_URL.startswith(("libsql://", "https://")):
-        return libsql.connect(database=TURSO_URL, auth_token=TURSO_TOKEN)
+    if TURSO_AVAILABLE and TURSO_URL:
+        return turso_serverless.connect(TURSO_URL, auth_token=TURSO_TOKEN)
     else:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
@@ -495,7 +495,7 @@ async def codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # MAIN
 # ============================================================
 
-def main():
+main():
     init_db()
 
     server_thread = threading.Thread(target=run_http_server, daemon=True)
