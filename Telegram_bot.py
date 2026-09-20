@@ -32,8 +32,8 @@ BOT_TOKEN = "8811516722:AAFT9OCvvRpd5TpKMt3fAOGPpCk2vsFV6q0"
 BOT_USERNAME = "PrimeGC_Topup_Bot"
 SUPPORT_USERNAME = "@PrimeGC_6"
 
-ADMIN_USERNAMES = {
-    "primegc_6",
+ADMIN_USER_IDS = {
+    1123404836,
 }
 
 ADMIN_CHAT_ID = None
@@ -75,7 +75,7 @@ def get_db_connection():
     if TURSO_AVAILABLE and TURSO_URL:
         return turso_serverless.connect(TURSO_URL, auth_token=TURSO_TOKEN)
     else:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=10.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -106,10 +106,7 @@ def is_admin(user) -> bool:
         return False
     if ADMIN_CHAT_ID and user.id == ADMIN_CHAT_ID:
         return True
-    if not user.username:
-        return False
-    clean_username = user.username.lstrip("@").lower()
-    return clean_username in {u.lstrip("@").lower() for u in ADMIN_USERNAMES}
+    return user.id in ADMIN_USER_IDS
 
 
 def get_user_display_name(user) -> str:
