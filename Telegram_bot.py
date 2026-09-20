@@ -495,7 +495,7 @@ async def codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # MAIN
 # ============================================================
 
- def main():
+def main():
     init_db()
 
     server_thread = threading.Thread(target=run_http_server, daemon=True)
