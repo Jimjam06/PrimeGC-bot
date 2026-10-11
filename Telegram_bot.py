@@ -18,7 +18,7 @@ from telegram.ext import (
 # CONFIG
 # ============================================================
 
-BOT_TOKEN = "8811516722:AAFT9OCvvRpd5TpKMt3fAOGPpCk2vsFV6q0"
+BOT_TOKEN = ""
 BOT_USERNAME = "PrimeGC_Topup_Bot"
 SUPPORT_USERNAME = "@PrimeGC_6"
 
