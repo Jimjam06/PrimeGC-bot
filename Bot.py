@@ -493,7 +493,6 @@ async def available_page_callback(update: Update, context: ContextTypes.DEFAULT_
         return
 
     page = int(query.data.split(":", 1)[1])
-    # Pass query directly so edit_message_text works on CallbackQuery
     await send_available_page(query, page, context, is_callback=True)
 
 
@@ -570,7 +569,7 @@ def main():
     application.add_handler(CallbackQueryHandler(cancel_claim_callback, pattern=r"^cancel_claim$"))
 
     print("🤖 Bot is running...")
-    application.run_polling()
+    application.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
