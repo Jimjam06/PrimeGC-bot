@@ -2,6 +2,9 @@ import html
 import secrets
 import sqlite3
 import string
+import threading
+import os
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from dateutil.relativedelta import relativedelta
@@ -18,7 +21,7 @@ from telegram.ext import (
 # CONFIG
 # ============================================================
 
-BOT_TOKEN = "8811516722:AAEULsBWVF8HuqzPh77XGicj3nRPmRTiJG0"
+BOT_TOKEN = "8811516722:AAFOjPIfVLoljt808cHFcDp9ejjMJOIr6-g"
 BOT_USERNAME = "PrimeGC_Topup_Bot"
 SUPPORT_USERNAME = "@PrimeGC_6"
 
@@ -32,6 +35,25 @@ ADMIN_CHAT_ID = 1123404836
 
 IST = ZoneInfo("Asia/Kolkata")
 DB_PATH = "codes.db"
+
+# ============================================================
+# MINI WEB SERVER (To satisfy Render's Free Web Service port requirement)
+# ============================================================
+
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is active and running!")
+        
+    def log_message(self, format, *args):
+        # Suppress routine HTTP access logs to keep terminal clean
+        return
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), SimpleHandler)
+    server.serve_forever()
 
 # ============================================================
 # DATABASE UTILITIES
@@ -515,7 +537,8 @@ async def activated_codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ No activated codes found.")
         return
 
-    lines = ["⚠️ <b>Activated Codes & User Details (Latest 50):</b>\n"]
+    lines
+    = ["⚠️ <b>Activated Codes & User Details (Latest 50):</b>\n"]
     for row in rows:
         safe_order = html.escape(str(row['order_name']))
         safe_by = html.escape(str(row["activated_by"]))
@@ -548,29 +571,12 @@ async def activated_codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     init_db()
 
+    # Start the dummy web server on a separate background thread
+    server_thread = threading.Thread(target=run_dummy_server, daemon=True)
+    server_thread.start()
+
     application = Application.builder().token(BOT_TOKEN).build()
 
     # Commands
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("genlinks", genlinks))
-    application.add_handler(CommandHandler("available", available_codes))
-    application.add_handler(CommandHandler("activated", activated_codes))
-
-    # Stepped Generation Callbacks
-    application.add_handler(CallbackQueryHandler(order_selected, pattern=r"^order:"))
-    application.add_handler(CallbackQueryHandler(duration_selected, pattern=r"^duration:"))
-    application.add_handler(CallbackQueryHandler(quantity_selected, pattern=r"^qty:"))
-
-    # Pagination Callback for Available Codes
-    application.add_handler(CallbackQueryHandler(available_page_callback, pattern=r"^avail_page:"))
-
-    # Stepped Activation Callbacks
-    application.add_handler(CallbackQueryHandler(confirm_claim_callback, pattern=r"^confirm_claim:"))
-    application.add_handler(CallbackQueryHandler(cancel_claim_callback, pattern=r"^cancel_claim$"))
-
-    print("🤖 Bot is running...")
-    application.run_polling(drop_pending_updates=True)
-
-
-if __name__ == "__main__":
-    main()
+    application.add_handler(CommandHandler("genli
