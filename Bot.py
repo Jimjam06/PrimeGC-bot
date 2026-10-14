@@ -21,7 +21,8 @@ from telegram.ext import (
 # CONFIG
 # ============================================================
 
-BOT_TOKEN = "8811516722:AAFuVThazfpdqm-A_wDSY00XE8VtLUYSnZM"
+# Load token safely from Render's environment variables
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 BOT_USERNAME = "PrimeGC_Topup_Bot"
 SUPPORT_USERNAME = "@PrimeGC_6"
 
