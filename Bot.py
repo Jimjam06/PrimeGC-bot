@@ -38,7 +38,7 @@ IST = ZoneInfo("Asia/Kolkata")
 DB_PATH = "codes.db"
 
 # ============================================================
-# MINI WEB SERVER (To satisfy Render's Web Service port & UptimeRobot)
+# MINI WEB SERVER (To satisfy Render & UptimeRobot HEAD/GET requests)
 # ============================================================
 
 class SimpleHandler(BaseHTTPRequestHandler):
@@ -47,6 +47,11 @@ class SimpleHandler(BaseHTTPRequestHandler):
         self.send_header("Content-type", "text/html")
         self.end_headers()
         self.wfile.write(b"Bot is active and running!")
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
         
     def log_message(self, format, *args):
         # Suppress routine HTTP access logs to keep terminal clean
