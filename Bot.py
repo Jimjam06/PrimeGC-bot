@@ -1,4 +1,4 @@
-limport html
+import html
 import secrets
 import sqlite3
 import string
