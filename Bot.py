@@ -21,7 +21,7 @@ from telegram.ext import (
 # CONFIG
 # ============================================================
 
-# Load token safely from Render's environment variables
+# Loaded securely from Render's Environment Variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 BOT_USERNAME = "PrimeGC_Topup_Bot"
 SUPPORT_USERNAME = "@PrimeGC_6"
@@ -38,12 +38,13 @@ IST = ZoneInfo("Asia/Kolkata")
 DB_PATH = "codes.db"
 
 # ============================================================
-# MINI WEB SERVER (To satisfy Render's Free Web Service port requirement)
+# MINI WEB SERVER (To satisfy Render's Web Service port & UptimeRobot)
 # ============================================================
 
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
+        self.send_header("Content-type", "text/html")
         self.end_headers()
         self.wfile.write(b"Bot is active and running!")
         
